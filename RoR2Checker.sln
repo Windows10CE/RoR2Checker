@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.31205.134
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RoR2Checker", "RoR2Checker.csproj", "{D4C209C6-B3C5-4170-8F6E-37C98168B3A1}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D4C209C6-B3C5-4170-8F6E-37C98168B3A1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D4C209C6-B3C5-4170-8F6E-37C98168B3A1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D4C209C6-B3C5-4170-8F6E-37C98168B3A1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D4C209C6-B3C5-4170-8F6E-37C98168B3A1}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {24705598-7059-44A8-B065-5762E001B9DB}
+	EndGlobalSection
+EndGlobal
