@@ -1,7 +1,6 @@
 ﻿using System;
 using System.IO;
 using System.IO.Compression;
-using System.Net.Http;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Linq;
@@ -107,7 +106,17 @@ namespace RoR2Checker.Modules
 
             dllsToCheck.ForEach(x => x.Dispose());
 
-            await ReplyAsync(anyFailed ? replyBuilder.ToString().Replace("`", "\\`") : $"{pkg.full_name} Passed");
+            string message = replyBuilder.ToString();
+
+            if (message.Length == 0) {
+                await ReplyAsync("Passed");
+            }
+            else if (message.Length < 2000) {
+                await ReplyAsync(message);
+            }
+            else {
+                await Context.Channel.SendFileAsync(new MemoryStream(UTF8Encoding.Default.GetBytes(message)), "results.txt");
+            }
         }
 
         private Fails CheckDLL(AssemblyDefinition asm, ref Fails failures)

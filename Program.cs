@@ -15,10 +15,6 @@ namespace RoR2Checker
         {
             using (var services = GetServices())
             {
-                if (Directory.Exists("Cache"))
-                    Directory.Delete("Cache", true);
-                Directory.CreateDirectory("Cache");
-
                 var client = services.GetRequiredService<DiscordSocketClient>();
 
                 client.Log += LogAsync;
