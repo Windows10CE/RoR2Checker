@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -10,14 +11,18 @@ using Discord.Commands;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using RoR2Checker.Models.Thunderstore;
+using RoR2Checker.Modules.Preconditions;
 
 namespace RoR2Checker.Modules
 {
-    public class Check : ModuleBase<SocketCommandContext>
+    public class CheckModule : ModuleBase<SocketCommandContext>
     {
+        private static ConcurrentDictionary<string, string> CachedDLLs = new ConcurrentDictionary<string, string>();
+
         [Command("check")]
         [Alias("c")]
-        [RequireOwner]
+        [RequireOwner(Group = "Auth")]
+        [ThunderstoreModerator(Group = "Auth")]
         public async Task CheckPackageAsync([Remainder] string info)
         {
             using var typing = Context.Channel.EnterTypingState();
@@ -30,86 +35,79 @@ namespace RoR2Checker.Modules
             }
 
             var pkg = await PackageInfo.FromAuthorAndNameAsync(nameParts[0], nameParts[1]);
-
-            using (var http = new HttpClient())
+            await pkg.latest.Download();
+            if (pkg.latest.Zip == null)
             {
-                var response = await http.SendAsync(new HttpRequestMessage()
-                {
-                    RequestUri = new Uri(pkg.latest.download_url)
-                });
+                await ReplyAsync("Failed to download package");
+                return;
+            }
 
-                if (!response.IsSuccessStatusCode)
+            var failures = new Fails();
+
+            var dllsToCheck = new List<AssemblyDefinition>();
+
+            var reader = new ReaderParameters();
+
+            using var resolver = new DefaultAssemblyResolver();
+            resolver.AddSearchDirectory("ReferenceAssemblies");
+            resolver.ResolveFailure += (sender, asmName) =>
+            {
+                failures.Assemblies.Add(asmName.FullName);
+                return AssemblyDefinition.CreateAssembly(new AssemblyNameDefinition(asmName.Name, asmName.Version), "<Module>", ModuleKind.Dll);
+            };
+
+            reader.AssemblyResolver = resolver;
+
+            foreach (var asmEntry in pkg.latest.Zip.Entries.Where(x => x.Name.ToLower().EndsWith(".dll")))
+            {
+                var fileName = Path.Combine("Cache", Guid.NewGuid().ToString());
+
+                asmEntry.ExtractToFile(fileName);
+
+                dllsToCheck.Add(AssemblyDefinition.ReadAssembly(fileName, reader));
+
+                CachedDLLs.TryAdd(dllsToCheck.Last().Name.FullName, fileName);
+            }
+
+            bool anyFailed = false;
+            StringBuilder replyBuilder = new StringBuilder();
+
+            foreach (var asm in dllsToCheck)
+            {
+                CheckDLL(asm, ref failures);
+                anyFailed |= failures.Any;
+
+                if (failures.Any)
+                    replyBuilder.AppendLine($"{asm.Name.Name} failures:");
+                if (failures.Assemblies.Any())
                 {
-                    await ReplyAsync("Error while downloading package");
-                    return;
+                    replyBuilder.AppendLine("**Missing Assemblies:**");
+                    foreach (var missing in failures.Assemblies)
+                        replyBuilder.AppendLine(missing);
                 }
-
-                using (var zip = new ZipArchive(await response.Content.ReadAsStreamAsync()))
+                if (failures.Types.Any())
                 {
-                    var failures = new Fails();
-
-                    var dllsToCheck = new List<AssemblyDefinition>();
-
-                    var reader = new ReaderParameters();
-
-                    var resolver = new DefaultAssemblyResolver();
-                    resolver.AddSearchDirectory("ReferenceAssemblies");
-                    resolver.ResolveFailure += (sender, asmName) =>
-                    {
-                        failures.Assemblies.Add(asmName.FullName);
-                        return AssemblyDefinition.CreateAssembly(new AssemblyNameDefinition(asmName.Name, asmName.Version), "<Module>", ModuleKind.Dll);
-                    };
-
-                    reader.AssemblyResolver = resolver;
-
-                    foreach (var asmEntry in zip.Entries.Where(x => x.Name.ToLower().EndsWith(".dll")))
-                    {
-                        var tempName = Path.Combine("Temp", Guid.NewGuid().ToString());
-                        
-                        asmEntry.ExtractToFile(tempName);
-
-                        dllsToCheck.Add(AssemblyDefinition.ReadAssembly(tempName, reader));
-                    }
-
-                    bool anyFailed = false;
-                    StringBuilder replyBuilder = new StringBuilder();
-
-                    foreach (var asm in dllsToCheck)
-                    {
-                        CheckDLL(asm, ref failures);
-                        anyFailed |= failures.Any;
-
-                        if (failures.Any)
-                            replyBuilder.AppendLine($"{asm.Name.Name} failures:");
-                        if (failures.Assemblies.Any())
-                        {
-                            replyBuilder.AppendLine("**Missing Assemblies:**");
-                            foreach (var missing in failures.Assemblies)
-                                replyBuilder.AppendLine(missing);
-                        }
-                        if (failures.Types.Any())
-                        {
-                            replyBuilder.AppendLine("**Missing Types:**");
-                            foreach (var missing in failures.Types)
-                                replyBuilder.AppendLine(missing);
-                        }
-                        if (failures.Methods.Any())
-                        {
-                            replyBuilder.AppendLine("**Missing Methods:**");
-                            foreach (var missing in failures.Methods)
-                                replyBuilder.AppendLine(missing);
-                        }
-                        if (failures.Fields.Any())
-                        {
-                            replyBuilder.AppendLine("**Missing Fields:**");
-                            foreach (var missing in failures.Fields)
-                                replyBuilder.AppendLine(missing);
-                        }
-                    }
-
-                    await ReplyAsync(anyFailed ? replyBuilder.ToString().Replace("`", "\\`") : $"{pkg.full_name} Passed");
+                    replyBuilder.AppendLine("**Missing Types:**");
+                    foreach (var missing in failures.Types)
+                        replyBuilder.AppendLine(missing);
+                }
+                if (failures.Methods.Any())
+                {
+                    replyBuilder.AppendLine("**Missing Methods:**");
+                    foreach (var missing in failures.Methods)
+                        replyBuilder.AppendLine(missing);
+                }
+                if (failures.Fields.Any())
+                {
+                    replyBuilder.AppendLine("**Missing Fields:**");
+                    foreach (var missing in failures.Fields)
+                        replyBuilder.AppendLine(missing);
                 }
             }
+
+            dllsToCheck.ForEach(x => x.Dispose());
+
+            await ReplyAsync(anyFailed ? replyBuilder.ToString().Replace("`", "\\`") : $"{pkg.full_name} Passed");
         }
 
         private Fails CheckDLL(AssemblyDefinition asm, ref Fails failures)

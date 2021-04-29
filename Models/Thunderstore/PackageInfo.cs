@@ -1,12 +1,13 @@
 ﻿using System;
 using System.Net.Http;
 using System.Net.Http.Json;
-using System.Text.Json.Serialization;
+using System.IO.Compression;
 using System.Threading.Tasks;
+using System.Text.Json.Serialization;
 
 namespace RoR2Checker.Models.Thunderstore
 {
-    public class PackageInfo
+    public class PackageInfo : IDisposable
     {
         [JsonPropertyName("namespace")]
         public string pkg_namespace { get; set; }
@@ -29,5 +30,7 @@ namespace RoR2Checker.Models.Thunderstore
 
             return await client.GetFromJsonAsync<PackageInfo>($"https://thunderstore.io/api/experimental/package/{author}/{pkgName}/");
         }
+
+        public void Dispose() => latest.Dispose();
     }
 }

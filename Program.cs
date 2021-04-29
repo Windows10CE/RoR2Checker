@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Discord;
@@ -14,6 +15,10 @@ namespace RoR2Checker
         {
             using (var services = GetServices())
             {
+                if (Directory.Exists("Cache"))
+                    Directory.Delete("Cache", true);
+                Directory.CreateDirectory("Cache");
+
                 var client = services.GetRequiredService<DiscordSocketClient>();
 
                 client.Log += LogAsync;

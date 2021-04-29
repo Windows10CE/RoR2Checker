@@ -1,9 +1,12 @@
 ﻿using System;
+using System.Net.Http;
+using System.IO.Compression;
+using System.Threading.Tasks;
 using System.Text.Json.Serialization;
 
 namespace RoR2Checker.Models.Thunderstore
 {
-    public class PackageVersion
+    public class PackageVersion : IDisposable
     {
         [JsonPropertyName("namespace")]
         public string pkg_namespace { get; set; }
@@ -18,5 +21,33 @@ namespace RoR2Checker.Models.Thunderstore
         public DateTime date_created { get; set; }
         public string website_url { get; set; }
         public bool is_active { get; set; }
+
+        private HttpResponseMessage _zipReq = null;
+        public ZipArchive Zip = null;
+
+        public void Dispose()
+        {
+            if (Zip != null)
+                Zip.Dispose();
+            if (_zipReq != null)
+                _zipReq.Dispose();
+        }
+
+        public async Task Download()
+        {
+            using var http = new HttpClient();
+
+            _zipReq = await http.SendAsync(new HttpRequestMessage()
+            {
+                RequestUri = new Uri(this.download_url)
+            });
+
+            if (!_zipReq.IsSuccessStatusCode)
+            {
+                return;
+            }
+
+            Zip =  new ZipArchive(await _zipReq.Content.ReadAsStreamAsync());
+        }
     }
 }
