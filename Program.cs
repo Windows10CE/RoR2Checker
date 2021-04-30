@@ -13,8 +13,16 @@ namespace RoR2Checker
     {
         public static async Task Main(string[] args)
         {
+            System.AppDomain.CurrentDomain.ProcessExit += (sender, args) => {
+                if (Directory.Exists("Temp"))
+                    Directory.Delete("Temp");
+            };
+
             using (var services = GetServices())
             {
+                if (!Directory.Exists("Temp"))
+                    Directory.CreateDirectory("Temp");
+
                 var client = services.GetRequiredService<DiscordSocketClient>();
 
                 client.Log += LogAsync;

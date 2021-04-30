@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Net.Http;
 using System.IO.Compression;
 using System.Threading.Tasks;
@@ -22,32 +23,43 @@ namespace RoR2Checker.Models.Thunderstore
         public string website_url { get; set; }
         public bool is_active { get; set; }
 
-        private HttpResponseMessage _zipReq = null;
         public ZipArchive Zip = null;
 
         public void Dispose()
         {
             if (Zip != null)
                 Zip.Dispose();
-            if (_zipReq != null)
-                _zipReq.Dispose();
         }
 
-        public async Task Download()
+        public async Task<bool> Download(bool useCache = true)
         {
+            var zipPath = Path.Combine("Cache", full_name + ".zip");
+
+            if (useCache && File.Exists(zipPath)) {
+                Zip = new ZipArchive(File.OpenRead(zipPath), ZipArchiveMode.Read, false);
+                return true;
+            }
+            else if (File.Exists(zipPath)) {
+                File.Delete(zipPath);
+            }
+            
             using var http = new HttpClient();
 
-            _zipReq = await http.SendAsync(new HttpRequestMessage()
+            using var zipReq = await http.SendAsync(new HttpRequestMessage()
             {
                 RequestUri = new Uri(this.download_url)
             });
 
-            if (!_zipReq.IsSuccessStatusCode)
+            if (!zipReq.IsSuccessStatusCode)
             {
-                return;
+                return false;
             }
 
-            Zip =  new ZipArchive(await _zipReq.Content.ReadAsStreamAsync());
+            var file = File.OpenWrite(zipPath);
+            await zipReq.Content.CopyToAsync(file);
+            await file.DisposeAsync();
+            Zip = new ZipArchive(File.OpenRead(zipPath), ZipArchiveMode.Read, false);
+            return false;
         }
     }
 }

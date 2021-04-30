@@ -16,8 +16,6 @@ namespace RoR2Checker.Modules
 {
     public class CheckModule : ModuleBase<SocketCommandContext>
     {
-        private static ConcurrentDictionary<string, string> CachedDLLs = new ConcurrentDictionary<string, string>();
-
         [Command("check")]
         [Alias("c")]
         [RequireOwner(Group = "Auth")]
@@ -34,13 +32,23 @@ namespace RoR2Checker.Modules
             }
 
             var pkg = await PackageInfo.FromAuthorAndNameAsync(nameParts[0], nameParts[1]);
-            await pkg.latest.Download();
+            var cached = await pkg.latest.Download(true);
             if (pkg.latest.Zip == null)
             {
                 await ReplyAsync("Failed to download package");
                 return;
             }
-
+            if (cached)
+                await ReplyAsync($"{pkg.latest.full_name} was in the cache, using that");
+            
+            var dependencies = new List<AssemblyDefinition>();
+            foreach (var depString in pkg.latest.dependencies) {
+                if (DependencyExceptions.Any(depString.Contains))
+                    continue;
+                var depChunks = depString.Split('-');
+                dependencies.AddRange(await GetDependencies(await PackageInfo.FromAuthorAndNameAsync(depChunks[0], depChunks[1])));
+            }
+            
             var failures = new Fails();
 
             var dllsToCheck = new List<AssemblyDefinition>();
@@ -51,6 +59,11 @@ namespace RoR2Checker.Modules
             resolver.AddSearchDirectory("ReferenceAssemblies");
             resolver.ResolveFailure += (sender, asmName) =>
             {
+                foreach (var dep in dependencies) {
+                    if (dep.Name.Name == asmName.Name)
+                        return dep;
+                }
+                
                 failures.Assemblies.Add(asmName.FullName);
                 return AssemblyDefinition.CreateAssembly(new AssemblyNameDefinition(asmName.Name, asmName.Version), "<Module>", ModuleKind.Dll);
             };
@@ -59,13 +72,11 @@ namespace RoR2Checker.Modules
 
             foreach (var asmEntry in pkg.latest.Zip.Entries.Where(x => x.Name.ToLower().EndsWith(".dll")))
             {
-                var fileName = Path.Combine("Cache", Guid.NewGuid().ToString());
+                var fileName = Path.Combine("Temp", Guid.NewGuid().ToString());
 
                 asmEntry.ExtractToFile(fileName);
 
                 dllsToCheck.Add(AssemblyDefinition.ReadAssembly(fileName, reader));
-
-                CachedDLLs.TryAdd(dllsToCheck.Last().Name.FullName, fileName);
             }
 
             bool anyFailed = false;
@@ -117,6 +128,38 @@ namespace RoR2Checker.Modules
             else {
                 await Context.Channel.SendFileAsync(new MemoryStream(UTF8Encoding.Default.GetBytes(message)), "results.txt");
             }
+        }
+
+        private readonly string[] DependencyExceptions = { "R2API", "BepInEx", "MMHook", "HookGenPatcher" };
+
+        private async Task<List<AssemblyDefinition>> GetDependencies(PackageInfo package) {
+            var assemblies = new List<AssemblyDefinition>();
+            foreach (var depString in package.latest.dependencies) {
+                if (DependencyExceptions.Any(depString.Contains))
+                    continue;
+                var depChunks = depString.Split('-');
+                assemblies.AddRange(await GetDependencies(await PackageInfo.FromAuthorAndNameAsync(depChunks[0], depChunks[1])));
+            }
+
+            await package.latest.Download();
+            if (package.latest.Zip == null)
+                throw new Exception($"Couldn't get zip from package info {package.full_name}");
+            
+            var reader = new ReaderParameters();
+            var resolver = new DefaultAssemblyResolver();
+            resolver.ResolveFailure += (sender, name) => {
+                return AssemblyDefinition.CreateAssembly(new AssemblyNameDefinition(name.Name, name.Version), "<Module>", ModuleKind.Dll);
+            };
+
+            foreach (var asmEntry in package.latest.Zip.Entries.Where(x => x.Name.ToLower().EndsWith(".dll"))) {
+                var fileName = Path.Combine("Temp", Guid.NewGuid().ToString());
+
+                asmEntry.ExtractToFile(fileName);
+
+                assemblies.Add(AssemblyDefinition.ReadAssembly(fileName, reader));
+            }
+
+            return assemblies;
         }
 
         private Fails CheckDLL(AssemblyDefinition asm, ref Fails failures)
