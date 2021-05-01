@@ -15,7 +15,7 @@ namespace RoR2Checker
         {
             System.AppDomain.CurrentDomain.ProcessExit += (sender, args) => {
                 if (Directory.Exists("Temp"))
-                    Directory.Delete("Temp");
+                    Directory.Delete("Temp", true);
             };
 
             using (var services = GetServices())
