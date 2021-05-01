@@ -1,0 +1,1 @@
+Add any common references to this folder for the bot to always have access to

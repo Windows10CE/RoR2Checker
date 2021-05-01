@@ -4,3 +4,5 @@ bin/
 .vs/
 Properties/launchSettings.json
 Cache
+ReferenceAssemblies/*.dll
+ReferenceAssemblies/*.exe
