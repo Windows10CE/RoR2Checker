@@ -3,8 +3,12 @@ version: "3.7"
 services: 
     bot:
         build: .
+        environment:
+            - CHECKER_TOKEN
         volumes:
             - package-cache:/App/Cache
+            - ./ReferenceAssemblies:/App/ReferenceAssemblies
+        restart: always
 
 volumes: 
     package-cache:
