@@ -1,0 +1,1 @@
+This folder contains all the assembly stubs that the bot needs to statically check against. They're made with a slightly modified version of Rein's Stubber-Publicizer that takes multiple assemblies as args. If you happen to need it, it's also here in this folder.
